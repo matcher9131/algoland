@@ -2,11 +2,17 @@
 
 GO ?= $(HOME)/.local/go/bin/go
 
+# Chromium needs a handful of shared libraries that `playwright install-deps`
+# would install with apt and root. These paths hold a rootless copy instead;
+# playwright.config.ts picks them up automatically when present.
+E2E_DEPS_DIR ?= $(HOME)/.local/playwright-deps
+E2E_DEB_DIR ?= $(HOME)/.cache/algoland-debs
+
 .DEFAULT_GOAL := help
 
 .PHONY: help
 help: ## Show this help
-	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
+	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: setup
@@ -53,16 +59,41 @@ typecheck: ## Type-check the frontend
 	cd web && npm run typecheck
 
 .PHONY: test
-test: ## Run the Go unit tests
+test: test-api test-web ## Run every test except E2E
+
+.PHONY: test-api
+test-api: ## Run the Go tests (starts a Postgres container)
 	cd api && $(GO) test ./...
 
-.PHONY: test-db
-test-db: ## Run the Go tests including the ones needing a live database
-	@test -n "$(ALGOLAND_TEST_DATABASE_URL)" || { \
-		echo "ALGOLAND_TEST_DATABASE_URL is required."; \
-		echo "Get it from: npx supabase status -o env | grep DB_URL"; \
+.PHONY: test-api-short
+test-api-short: ## Run only the Go tests that need no Docker
+	cd api && $(GO) test -short ./...
+
+.PHONY: test-web
+test-web: ## Run the Vitest suites
+	cd web && npm test
+
+.PHONY: e2e-deps
+e2e-deps: ## Install Chromium's system libraries into $$HOME (no root needed)
+	@mkdir -p $(E2E_DEB_DIR) $(E2E_DEPS_DIR)
+	cd $(E2E_DEB_DIR) && apt-get download libnss3 libnspr4 libasound2t64
+	cd $(E2E_DEB_DIR) && for d in *.deb; do dpkg -x "$$d" $(E2E_DEPS_DIR); done
+	cd web && npx playwright install chromium
+	@echo "Chromium dependencies unpacked into $(E2E_DEPS_DIR)."
+
+.PHONY: test-e2e
+test-e2e: ## Run the Playwright E2E suite against the full local stack
+	@test -n "$(DATABASE_URL)" || { \
+		echo "DATABASE_URL and SUPABASE_URL are required for the backend specs."; \
+		echo "Load them with: export $$(npx supabase status -o env | tr -d '\"' | xargs)"; \
 		exit 1; }
-	cd api && $(GO) test ./... -v
+	cd web && npm run test:e2e
+
+.PHONY: coverage
+coverage: ## Report coverage for both services
+	cd api && $(GO) test ./... -coverprofile=coverage.out -coverpkg=./... \
+		&& $(GO) tool cover -func=coverage.out | tail -1
+	cd web && npm run test:coverage
 
 .PHONY: build
 build: ## Build both services
@@ -74,5 +105,6 @@ docker-build: ## Build the API container image exactly as Vercel does
 	docker build -f api/Dockerfile.vercel -t algoland-api:local api
 
 .PHONY: clean
-clean: ## Remove build artifacts
-	rm -rf web/.next api/bin
+clean: ## Remove build artifacts and test output
+	rm -rf web/.next api/bin api/coverage.out
+	rm -rf web/coverage web/playwright-report web/test-results

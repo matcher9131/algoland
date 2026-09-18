@@ -19,6 +19,7 @@ import (
 	"algoland/api/internal/config"
 	"algoland/api/internal/db"
 	"algoland/api/internal/handler"
+	"algoland/api/internal/store"
 )
 
 func main() {
@@ -49,7 +50,7 @@ func run() error {
 	}
 	defer pool.Close()
 
-	verifier, err := auth.NewVerifier(ctx, cfg.JWKSURL())
+	verifier, err := auth.NewJWKSVerifier(ctx, cfg.JWKSURL())
 	if err != nil {
 		return err
 	}
@@ -57,7 +58,7 @@ func run() error {
 	srv := &http.Server{
 		Addr: ":" + cfg.Port,
 		Handler: handler.New(handler.Deps{
-			Pool:     pool,
+			Store:    store.NewPostgres(pool),
 			Verifier: verifier,
 			Env:      cfg.Env,
 		}),

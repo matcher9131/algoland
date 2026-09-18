@@ -3,21 +3,24 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 
 	"algoland/api/internal/auth"
-	"algoland/api/internal/db"
 	"algoland/api/internal/httpx"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// Store is the database access the routes need. Declaring it here, next to
+// the consumer, keeps the handler tests free of a real database.
+type Store interface {
+	Ping(ctx context.Context) error
+	Now(ctx context.Context, user auth.User) (time.Time, error)
+}
 
 // Deps are the collaborators every route shares.
 type Deps struct {
-	Pool     *pgxpool.Pool
-	Verifier *auth.Verifier
+	Store    Store
+	Verifier auth.Verifier
 	Env      string
 }
 
@@ -34,7 +37,7 @@ func New(d Deps) http.Handler {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
 
-		if err := d.Pool.Ping(ctx); err != nil {
+		if err := d.Store.Ping(ctx); err != nil {
 			httpx.Error(w, http.StatusServiceUnavailable, "database unreachable")
 			return
 		}
@@ -54,12 +57,9 @@ func New(d Deps) http.Handler {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
-		// Run inside the caller's RLS context so Postgres applies the same
+		// Read inside the caller's RLS context so Postgres applies the same
 		// row-level policies the Supabase client would.
-		var now time.Time
-		err := db.AsUser(ctx, d.Pool, claimsJSON(user), func(q db.Queryer) error {
-			return q.QueryRow(ctx, "select now()").Scan(&now)
-		})
+		now, err := d.Store.Now(ctx, user)
 		if err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "query failed")
 			return
@@ -73,19 +73,11 @@ func New(d Deps) http.Handler {
 		})
 	})
 
-	mux.Handle("/v1/", d.Verifier.Required(v1))
+	mux.Handle("/v1/", auth.Required(d.Verifier, v1))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusNotFound, "not found")
 	})
 
 	return httpx.Recover(httpx.Logger(mux))
-}
-
-func claimsJSON(u auth.User) string {
-	b, err := json.Marshal(map[string]string{"sub": u.ID, "role": u.Role, "email": u.Email})
-	if err != nil {
-		return "{}"
-	}
-	return string(b)
 }

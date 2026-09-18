@@ -10,11 +10,14 @@ algoland/
 ├── Makefile                 # 開発タスク
 ├── package.json             # Supabase CLI / Vercel CLI をピン留め
 ├── web/                     # Next.js（ネイティブランタイム）
+│   ├── e2e/                 # Playwright
+│   ├── vitest.config.mts    # browser / server の 2 プロジェクト構成
 │   └── src/
 │       ├── app/
 │       ├── lib/
 │       │   ├── api.ts       # service binding 経由で Go を呼ぶヘルパー
 │       │   └── supabase/    # browser / server / proxy クライアント
+│       ├── test/            # MSW サーバー
 │       └── proxy.ts         # セッション更新（旧 middleware.ts）
 ├── api/                     # Go（コンテナイメージ）
 │   ├── Dockerfile.vercel
@@ -23,8 +26,10 @@ algoland/
 │       ├── auth/            # Supabase JWT を JWKS で検証
 │       ├── config/
 │       ├── db/              # pgx プール + RLS スコープ実行
-│       ├── handler/
-│       └── httpx/
+│       ├── handler/         # ルーティング（依存はインターフェース）
+│       ├── httpx/
+│       ├── store/           # handler.Store の Postgres 実装
+│       └── testdb/          # testcontainers による使い捨て DB
 └── supabase/
     └── migrations/
 ```
@@ -59,6 +64,12 @@ algoland/
 | MicahParks/keyfunc | v3.8.2 | |
 | Supabase CLI | 2.117.0 | |
 | Vercel CLI | 59.23.2 | |
+| Vitest | 5.0.1 | |
+| React Testing Library | 16.3.3 | |
+| MSW | 2.15.0 | |
+| Playwright | 1.63.0 | |
+| stretchr/testify | v1.12.1 | |
+| testcontainers-go | v0.44.0 | |
 
 npm は両方の `package.json` で完全一致のバージョンを指定し、`.npmrc` に `save-exact=true` を置いています。Go は `go.mod` と `Dockerfile.vercel` の両方で 1.27.1 を指定しています。
 
@@ -117,19 +128,48 @@ make dev-web     # :3000
 
 ## テスト
 
+| レイヤ | ツール | 何を検証するか |
+|---|---|---|
+| Go ユニット | 標準 testing + testify 1.12.1 | 設定読み込み、JWT ミドルウェア、HTTP ハンドラ（フェイク使用・DB 不要） |
+| Go 統合 | testcontainers-go 0.44.0 | **RLS ポリシーの強制**、`AsUser` のスコープと漏洩防止、トリガ、pgx プール |
+| FE ユニット | Vitest 5.0.1 + React Testing Library 16.3.3 | Client / 同期 Server Component の描画 |
+| FE サーバー側 | Vitest (node) + MSW 2.15.0 | `apiFetch` の URL 組み立て・トークン付与・キャッシュ無効化 |
+| E2E | Playwright 1.63.0 | async Server Component、proxy、Go バックエンドとの結合 |
+
 ```bash
-make test        # Go のユニットテスト
-make typecheck   # フロントエンドの型検査
-make lint        # 両方の lint
+make test             # Go + FE のユニット/統合（E2E 以外）
+make test-api         # Go のみ（Postgres コンテナを自動起動）
+make test-api-short   # Docker 不要の Go テストのみ
+make test-web         # Vitest のみ
+make coverage         # 両方のカバレッジ
 ```
 
-DB を使うテスト（`db.AsUser` が RLS を正しく適用するかの検証）は環境変数を渡したときだけ実行されます。
+### Go の統合テスト
+
+`api/internal/testdb` が `postgres:17-alpine` のコンテナを起動し、Supabase の shim（`auth` スキーマ・`auth.uid()`・ロール）を当ててから `supabase/migrations` を順に適用します。**ローカルの Supabase スタックは不要**で、`go test ./...` だけで完結します。テストごとにテーブルは truncate され、コンテナはテストバイナリ終了時に testcontainers の reaper が破棄します。
+
+RLS は Go ではなく Postgres が実行するものなので、認可の検証は必ずこの実 DB 経由で行っています。
+
+### E2E
+
+Vitest は **async Server Component をテストできない**（Next.js 公式の制約）ため、`/status` のようなページは Playwright が担当します。
 
 ```bash
-export ALGOLAND_TEST_DATABASE_URL="$(npx supabase status -o env | grep '^DB_URL=' | cut -d'"' -f2)"
-export ALGOLAND_TEST_USER_ID="<auth.users の任意の id>"
-make test-db
+export $(npx supabase status -o env | tr -d '"' | xargs)
+make test-e2e
 ```
+
+`playwright.config.ts` が Next.js と Go サーバーの両方を起動します。`DATABASE_URL` と `SUPABASE_URL` が無い場合はバックエンド依存の spec が自動で skip され、フロントだけの spec は動きます。
+
+#### 初回のみ: Chromium のシステムライブラリ
+
+Chromium の実行には `libnss3` / `libnspr4` / `libasound2` が必要です。公式手順 (`sudo npx playwright install-deps chromium`) は root を要求し、かつ headed モード用の X 関連パッケージまで 20 以上入れますが、**headless で実際に不足するのは 4 ファイルだけ**です。root 無しで済ませられます。
+
+```bash
+make e2e-deps
+```
+
+これは 3 つの .deb（計 2MB）を `apt-get download` し、`~/.local/playwright-deps` に展開します。`playwright.config.ts` はこのディレクトリがあれば自動で `LD_LIBRARY_PATH` に加えるため、以後は追加の環境変数なしで `make test-e2e` が動きます。システムパッケージが入っている環境や CI では何もしません。
 
 ## デプロイ前に必要な手動設定
 
@@ -145,6 +185,7 @@ make test-db
 - **RLS** — Go は PostgREST を経由せず pgx で直接 Postgres に繋ぐため、認可はすべて RLS が担います。`db.AsUser` がトランザクション内で `request.jwt.claims` と `authenticated` ロールを `SET LOCAL` 相当で設定するので、`auth.uid()` を参照するポリシーがそのまま機能します。接続プールの使い回しでも設定は漏れません。
 - **セッション Cookie とキャッシュ** — `@supabase/ssr` 0.12.7 の `setAll` は第 2 引数でキャッシュ抑止ヘッダーを渡します。これを応答に反映しないと CDN が他ユーザーのセッションを配信しうるため、`web/src/lib/supabase/proxy.ts` で必ず設定しています。
 - **Secure Compute / Static IP** — コンテナイメージでは未対応です。Supabase 側で IP 許可リストを使う予定がある場合はこの構成では成立しません。
+- **ハンドラの依存はインターフェース** — `handler.Deps` は `Store` と `auth.Verifier` を受け取ります。具象の `*pgxpool.Pool` や JWKS 実装に依存していないため、ハンドラのテストは DB もネットワークも使いません。
 - **`npm audit`** — ルートの警告は `vercel` CLI が内部で持つ `undici` に由来する開発専用の依存です。`npm audit fix --force` は Vercel CLI を 54 系へダウングレードするため、実行しないでください。
 
 ## コマンド一覧

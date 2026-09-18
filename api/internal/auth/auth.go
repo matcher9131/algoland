@@ -4,6 +4,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -22,21 +23,32 @@ type User struct {
 	Role  string
 }
 
-// Verifier validates access tokens against the Supabase JWKS endpoint.
-type Verifier struct {
+// Verifier turns a raw bearer token into a User. Handlers depend on this
+// interface rather than the JWKS implementation, so tests can supply a fake
+// without reaching the network.
+type Verifier interface {
+	Verify(token string) (User, error)
+}
+
+// JWKSVerifier validates access tokens against the Supabase JWKS endpoint.
+type JWKSVerifier struct {
 	keyfunc jwt.Keyfunc
 	parser  *jwt.Parser
 }
 
-// NewVerifier fetches the project JWKS and keeps it refreshed in the
+// Compile-time check that the real implementation satisfies the interface
+// handlers depend on.
+var _ Verifier = (*JWKSVerifier)(nil)
+
+// NewJWKSVerifier fetches the project JWKS and keeps it refreshed in the
 // background, so key rotation does not require a redeploy.
-func NewVerifier(ctx context.Context, jwksURL string) (*Verifier, error) {
+func NewJWKSVerifier(ctx context.Context, jwksURL string) (*JWKSVerifier, error) {
 	k, err := keyfunc.NewDefaultCtx(ctx, []string{jwksURL})
 	if err != nil {
 		return nil, fmt.Errorf("load jwks from %s: %w", jwksURL, err)
 	}
 
-	return &Verifier{
+	return &JWKSVerifier{
 		keyfunc: k.Keyfunc,
 		parser: jwt.NewParser(
 			jwt.WithAudience("authenticated"),
@@ -46,7 +58,7 @@ func NewVerifier(ctx context.Context, jwksURL string) (*Verifier, error) {
 }
 
 // Verify parses and validates a raw bearer token.
-func (v *Verifier) Verify(token string) (User, error) {
+func (v *JWKSVerifier) Verify(token string) (User, error) {
 	var claims jwt.MapClaims
 	if _, err := v.parser.ParseWithClaims(token, &claims, v.keyfunc); err != nil {
 		return User{}, fmt.Errorf("invalid token: %w", err)
@@ -63,8 +75,8 @@ func (v *Verifier) Verify(token string) (User, error) {
 	return User{ID: sub, Email: email, Role: role}, nil
 }
 
-// Required rejects any request that does not carry a valid access token.
-func (v *Verifier) Required(next http.Handler) http.Handler {
+// Required rejects any request that does not carry a token v accepts.
+func Required(v Verifier, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, ok := bearerToken(r)
 		if !ok {
@@ -78,14 +90,34 @@ func (v *Verifier) Required(next http.Handler) http.Handler {
 			return
 		}
 
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), contextKey{}, user)))
+		next.ServeHTTP(w, r.WithContext(NewContext(r.Context(), user)))
 	})
+}
+
+// NewContext returns a copy of ctx carrying the authenticated user.
+func NewContext(ctx context.Context, user User) context.Context {
+	return context.WithValue(ctx, contextKey{}, user)
 }
 
 // FromContext returns the authenticated user attached by Required.
 func FromContext(ctx context.Context) (User, bool) {
 	u, ok := ctx.Value(contextKey{}).(User)
 	return u, ok
+}
+
+// Claims encodes the verified identity the way Postgres expects to read it
+// from request.jwt.claims.
+func (u User) Claims() string {
+	b, err := json.Marshal(map[string]string{
+		"sub":   u.ID,
+		"role":  u.Role,
+		"email": u.Email,
+	})
+	if err != nil {
+		// The map holds only strings, so this cannot fail in practice.
+		return "{}"
+	}
+	return string(b)
 }
 
 func bearerToken(r *http.Request) (string, bool) {
