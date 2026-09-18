@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Go
+/api/server
+/api/bin/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel/
+
+# Supabase CLI
+/supabase/.temp/
+/supabase/.branches/
+
+# Editors and OS
+.DS_Store
+*.swp
+.idea/
+.vscode/

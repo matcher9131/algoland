@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1
+
+# Build stage. The Go toolchain version is pinned here rather than inferred
+# from go.mod, so the image is the single source of truth for the build.
+FROM golang:1.27.1 AS build
+
+WORKDIR /src
+
+# Copy the module files first so dependency downloads stay cached whenever
+# only application code changes.
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# CGO_ENABLED=0 produces a static binary that runs on a distroless base.
+# -s -w strips the symbol table and DWARF data to keep the image small.
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -trimpath \
+    -ldflags='-s -w' \
+    -o /out/server \
+    ./cmd/server
+
+# Runtime stage. distroless/static ships CA certificates (needed for TLS to
+# Supabase and the JWKS endpoint) and nothing else: no shell, no package
+# manager.
+FROM gcr.io/distroless/static-debian12:nonroot
+
+WORKDIR /app
+COPY --from=build /out/server /app/server
+
+# Vercel routes container traffic to port 80 unless PORT is set in the
+# project settings. Set PORT=8080 there to match this value; the unprivileged
+# distroless user cannot bind to port 80.
+ENV PORT=8080
+EXPOSE 8080
+
+USER nonroot:nonroot
+ENTRYPOINT ["/app/server"]

@@ -1,0 +1,25 @@
+{
+  "name": "algoland",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Next.js frontend and Go backend deployed as one Vercel project, backed by Supabase.",
+  "scripts": {
+    "dev": "vercel dev",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:diff": "supabase db diff -f",
+    "db:reset": "supabase db reset",
+    "db:push": "supabase db push",
+    "db:types": "supabase gen types typescript --local > web/src/lib/supabase/database.types.ts"
+  },
+  "devDependencies": {
+    "supabase": "2.117.0",
+    "vercel": "59.23.2"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.27.0": true
+  }
+}

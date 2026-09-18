@@ -1,0 +1,8 @@
+.git
+.gitignore
+Dockerfile.vercel
+.dockerignore
+*.md
+.env
+.env.*
+!.env.example
