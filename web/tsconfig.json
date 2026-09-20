@@ -20,7 +20,12 @@
     ],
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
   },
   "include": [
     "next-env.d.ts",
