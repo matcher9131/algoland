@@ -6,10 +6,8 @@
 |---|---|:-:|:-:|---|---|
 |created_at|TIMESTAMPZ|T|now()|-|-|
 |failure_reason|enum (logs_failure_reason)|F|NULL|-|-|
-|ip_address|text|T|-|-|下位8ビットをマスク|
-|mail_hash|text|T|-|-|メールアドレスのソルト付きハッシュ|
 |type|enum (logs_type)|T|-|-|-|
-|user_agent|text|T|-|-|-|
+|user_id|uuid|F|-|FK (app_users.id)|登録外ユーザのとき`NULL`|
 
 ## 列挙体
 
