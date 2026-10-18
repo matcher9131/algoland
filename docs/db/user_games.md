@@ -4,8 +4,7 @@
 
 |物理名|データ型|Not null|Default|Key|備考|
 |---|---|:-:|:-:|---|---|
-|game_id|uuid|T|-|FK (games.id)|-|
-|problem_id|int8|T|-|複合PK, FK (problems.id)|-|
+|game_id|uuid|T|-|複合PK, FK (games.id)|-|
 |user_id|uuid|T|-|複合PK, FK (app_users.id)|-|
 
 ## 運用
