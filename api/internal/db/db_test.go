@@ -16,7 +16,7 @@ func TestNew(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
-	assert.NoError(t, pool.Ping(t.Context()))
+	require.NoError(t, pool.Ping(t.Context()))
 
 	// The pool is sized for a serverless container, where many short-lived
 	// instances share one Supabase pooler.

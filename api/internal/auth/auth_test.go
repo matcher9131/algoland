@@ -42,7 +42,7 @@ func TestBearerToken(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 			if tt.header != "" {
 				r.Header.Set("Authorization", tt.header)
 			}
@@ -60,22 +60,21 @@ func TestRequiredPassesTheUserThrough(t *testing.T) {
 	verifier := &fakeVerifier{user: want}
 
 	var got User
-	var reached bool
+	var gotOK, reached bool
 	handler := Required(verifier, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reached = true
-		var ok bool
-		got, ok = FromContext(r.Context())
-		require.True(t, ok, "the handler must see the authenticated user")
+		got, gotOK = FromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	r := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/me", nil)
 	r.Header.Set("Authorization", "Bearer some.access.token")
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, r)
 
 	require.True(t, reached, "the next handler must run")
+	require.True(t, gotOK, "the handler must see the authenticated user")
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, want, got)
 	assert.Equal(t, "some.access.token", verifier.gotToken, "the raw token must reach the verifier")
@@ -107,7 +106,7 @@ func TestRequiredRejectsBadRequests(t *testing.T) {
 				t.Fatal("the next handler must not run")
 			}))
 
-			r := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+			r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/me", nil)
 			if tt.header != "" {
 				r.Header.Set("Authorization", tt.header)
 			}
@@ -131,7 +130,7 @@ func TestRequiredDoesNotLeakTheVerifierError(t *testing.T) {
 	verifier := &fakeVerifier{err: errors.New("crypto/ecdsa: verification error for kid abc123")}
 	handler := Required(verifier, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 
-	r := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/me", nil)
 	r.Header.Set("Authorization", "Bearer bad.token")
 	rec := httptest.NewRecorder()
 

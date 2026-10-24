@@ -29,7 +29,9 @@ func AsUser(ctx context.Context, pool *pgxpool.Pool, claims string, fn func(Quer
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
 
 	if _, err := tx.Exec(ctx, "select set_config('role', 'authenticated', true)"); err != nil {
 		return fmt.Errorf("set role: %w", err)

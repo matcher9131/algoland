@@ -75,7 +75,7 @@ func newHarness(t *testing.T, store handler.Store) harness {
 func (h harness) get(t *testing.T, path string, token string) *httptest.ResponseRecorder {
 	t.Helper()
 
-	r := httptest.NewRequest(http.MethodGet, path, nil)
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)
 	}
