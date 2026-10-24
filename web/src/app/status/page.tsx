@@ -10,11 +10,17 @@ async function readHealth(): Promise<
   try {
     const response = await apiFetch("/healthz");
     if (!response.ok) {
-      return { ok: false, message: `バックエンドが ${response.status} を返しました` };
+      return {
+        ok: false,
+        message: `バックエンドが ${response.status} を返しました`,
+      };
     }
     return { ok: true, body: (await response.json()) as Health };
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -27,7 +33,9 @@ export default async function StatusPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-6 px-6 py-16">
-      <h1 className="font-mono text-2xl font-semibold tracking-tight">Backend status</h1>
+      <h1 className="font-mono text-2xl font-semibold tracking-tight">
+        Backend status
+      </h1>
 
       {result.ok ? (
         <dl className="flex flex-col divide-y divide-foreground/10 border-y border-foreground/10">
@@ -39,7 +47,9 @@ export default async function StatusPage() {
           </div>
           <div className="flex gap-6 py-3">
             <dt className="w-24 shrink-0 text-sm font-medium">env</dt>
-            <dd className="font-mono text-sm text-foreground/70">{result.body.env}</dd>
+            <dd className="font-mono text-sm text-foreground/70">
+              {result.body.env}
+            </dd>
           </div>
         </dl>
       ) : (

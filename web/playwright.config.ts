@@ -10,7 +10,10 @@ import { defineConfig, devices } from "@playwright/test";
  * home directory instead, so point the loader at them when they are there.
  * On a machine with the system packages installed this is a no-op.
  */
-const localDeps = path.join(homedir(), ".local/playwright-deps/usr/lib/x86_64-linux-gnu");
+const localDeps = path.join(
+  homedir(),
+  ".local/playwright-deps/usr/lib/x86_64-linux-gnu",
+);
 if (existsSync(localDeps)) {
   process.env.LD_LIBRARY_PATH = [localDeps, process.env.LD_LIBRARY_PATH]
     .filter(Boolean)
@@ -26,7 +29,9 @@ const baseURL = `http://127.0.0.1:${PORT}`;
  * Without them the API specs skip themselves, so a contributor can still run
  * the frontend E2E suite without a local Supabase stack.
  */
-const hasBackendEnv = Boolean(process.env.DATABASE_URL && process.env.SUPABASE_URL);
+const hasBackendEnv = Boolean(
+  process.env.DATABASE_URL && process.env.SUPABASE_URL,
+);
 
 /** Copies the named variables through to a server, skipping any that are unset. */
 function passThrough(...names: string[]): Record<string, string> {
@@ -79,7 +84,9 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
+  reporter: process.env.CI
+    ? [["github"], ["html", { open: "never" }]]
+    : [["list"]],
   use: {
     baseURL,
     trace: "on-first-retry",

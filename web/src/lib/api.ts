@@ -48,7 +48,9 @@ export async function apiJson<T>(
 ): Promise<T> {
   const response = await apiFetch(path, init);
   if (!response.ok) {
-    throw new Error(`API ${init.method ?? "GET"} ${path} failed: ${response.status}`);
+    throw new Error(
+      `API ${init.method ?? "GET"} ${path} failed: ${response.status}`,
+    );
   }
   return (await response.json()) as T;
 }

@@ -20,7 +20,9 @@ async function importApi() {
 describe("apiFetch", () => {
   beforeEach(() => {
     vi.stubEnv("API_URL", BASE_URL);
-    getSession.mockResolvedValue({ data: { session: { access_token: "the.access.token" } } });
+    getSession.mockResolvedValue({
+      data: { session: { access_token: "the.access.token" } },
+    });
   });
 
   afterEach(() => {
@@ -128,10 +130,15 @@ describe("apiJson", () => {
   it("parses a successful body", async () => {
     const { apiJson } = await importApi();
     mswServer.use(
-      http.get(`${BASE_URL}/healthz`, () => HttpResponse.json({ status: "ok", env: "test" })),
+      http.get(`${BASE_URL}/healthz`, () =>
+        HttpResponse.json({ status: "ok", env: "test" }),
+      ),
     );
 
-    await expect(apiJson("/healthz")).resolves.toEqual({ status: "ok", env: "test" });
+    await expect(apiJson("/healthz")).resolves.toEqual({
+      status: "ok",
+      env: "test",
+    });
   });
 
   it("throws on a non-2xx status", async () => {

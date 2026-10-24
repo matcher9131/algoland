@@ -3,3 +3,23 @@ repos:
     rev: v8.30.1
     hooks:
       - id: gitleaks
+  - repo: local
+    hooks:
+      - id: lint-web
+        name: lint (web)
+        entry: make lint-web
+        language: system
+        files: ^web/
+        pass_filenames: false
+      - id: lint-api
+        name: lint (api)
+        entry: make lint-api
+        language: system
+        files: ^api/
+        pass_filenames: false
+      - id: format-web
+        name: format check (web)
+        entry: make fmt-check-web
+        language: system
+        files: ^web/
+        pass_filenames: false

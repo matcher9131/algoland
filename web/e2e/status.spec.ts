@@ -17,7 +17,9 @@ test.describe("status page", () => {
     await expect(page.getByText("development")).toBeVisible();
   });
 
-  test("renders on every request rather than from a prerender", async ({ page }) => {
+  test("renders on every request rather than from a prerender", async ({
+    page,
+  }) => {
     const first = await page.goto("/status");
 
     // A statically prerendered page would be served from the CDN cache; this

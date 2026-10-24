@@ -7,7 +7,9 @@ describe("Home", () => {
   it("renders the project name as the heading", () => {
     render(<Home />);
 
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("algoland");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "algoland",
+    );
   });
 
   it("links to the backend status page", () => {
