@@ -6,7 +6,8 @@
 |---|---|:-:|:-:|---|---|
 |created_at|TIMESTAMPZ|T|now()|-|-|
 |game_id|uuid|T|-|FK (games.id)|-|
-|value|text|T|-|-|-|
+|input_value|float8|T|-|-|-|
+|output_value|boolean|T|-|-|-|
 
 ## インデックス
 |インデックス名|対象カラム|ユニーク|オプション|
